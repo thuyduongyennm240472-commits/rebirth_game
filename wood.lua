@@ -1,13 +1,17 @@
 --[[
-    WOOD.LUA v3.0 - MAX SPEED + FULL PROTECTION
-    - Respawn TP cố định về (96, 22.0625, 52) khi vào game
-    - Tốc độ chặt tối đa (0.05s delay)
-    - Dưới 50 studs: Instant TP → Chặt
-    - Trên 50 studs: Respawn TP → Sticky → Chặt
-    - Không tìm thấy cây → Hop Server ngay
-    - Loot Blacklist: Carrot, Pepper, Seaweed, Cabbage
-    - Bảo vệ: Anti-Kill, Anti-Kick, Hunger Check, Remove Water
+    WOOD.LUA v3.1 - MAX SPEED + FULL PROTECTION
+    - UI Cleanup logic included
 ]]
+
+local lp = game:GetService("Players").LocalPlayer
+local function cleanupOldWood()
+    for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
+        if gui.Name == "WoodFarmUI" or gui.Name == "StandaloneWoodUI" then
+            pcall(function() gui:Destroy() end)
+        end
+    end
+end
+cleanupOldWood()
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 local lp = game:GetService("Players").LocalPlayer
