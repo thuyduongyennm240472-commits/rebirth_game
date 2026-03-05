@@ -295,8 +295,8 @@ local function runLocalScript(filename)
     -- Ưu tiên 1: Tải từ GitHub Public Raw (Không cần token)
     if GITHUB.user ~= "YOUR_GITHUB_USERNAME" then
         local url = string.format(
-            "https://raw.githubusercontent.com/%s/%s/%s/%s",
-            GITHUB.user, GITHUB.repo, GITHUB.branch, filename
+            "https://raw.githubusercontent.com/%s/%s/%s/%s?t=%s",
+            GITHUB.user, GITHUB.repo, GITHUB.branch, filename, tostring(tick())
         )
         
         local success, res = pcall(function()

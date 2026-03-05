@@ -25,7 +25,7 @@ local toolRemotes   = ri:WaitForChild("Tools", 5)
 local chopRemote    = intRemotes:WaitForChild("chop")
 local resetRemote   = charRemotes:WaitForChild("reset")
 local respawnRemote = charRemotes:WaitForChild("respawn")
-local pickupRemote  = intRemotes:WaitForChild("pickupItem")
+local pickupRemote  = intRemotes:WaitForChild("pickupItem", 2) or (ri:FindFirstChild("inventory") and ri.inventory:FindFirstChild("pickupItem"))
 local toolCheck     = toolRemotes and toolRemotes:WaitForChild("CheckToolSetup", 3)
 
 local settings = {
