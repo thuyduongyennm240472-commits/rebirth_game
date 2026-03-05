@@ -1,8 +1,8 @@
 --[[
-    WOOD.LUA v3.3 - USER BASE VERSION
-    - Logic: Theo bản v1.0 của người dùng (Siêu ổn định)
-    - Reconnect: Tự động kết nối lại khi bị Kick/Crash
-    - Optimize: Tốc độ chặt cực nhanh (0.05s)
+    WOOD.LUA v3.4 - INSANE SPEED (EXTREME TURBO)
+    - Turbo Chop: Fire 3x per cycle
+    - Fast Pickup: Background loot task
+    - Ultra Fast Recovery: 0-delay after respawn
 ]]
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -25,33 +25,30 @@ local toolRemotes   = ri:WaitForChild("Tools", 5)
 local chopRemote    = intRemotes:WaitForChild("chop")
 local resetRemote   = charRemotes:WaitForChild("reset")
 local respawnRemote = charRemotes:WaitForChild("respawn")
+local pickupRemote  = intRemotes:WaitForChild("pickupItem")
 local toolCheck     = toolRemotes and toolRemotes:WaitForChild("CheckToolSetup", 3)
 
 local settings = {
     enabled       = true,
-    delay         = 0.05, -- Tốc độ chặt nhanh (v3.0)
+    delay         = 0.04, -- Cực nhanh
     toolSlot      = 4,
     scanRange     = 5000,
     isTeleporting = false,
     targetCF      = nil,
     targetTree    = nil,
-    spawnPos      = CFrame.new(96, 22.0625, 52), -- Tọa độ chuẩn của bạn
+    spawnPos      = CFrame.new(96, 22.0625, 52),
     respawnArgs   = {15382674, 12, 2, 17, 15382674, 15382674, false}
 }
 
--- AUTO RECONNECT (Tự động kết nối lại khi Kick)
+-- [1] AUTO RECONNECT
 task.spawn(function()
     while true do
         pcall(function()
             local prompt = CoreGui:FindFirstChild("RobloxPromptGui")
-            if prompt then
-                local overlay = prompt:FindFirstChild("promptOverlay")
-                if overlay then
-                    local err = overlay:FindFirstChild("ErrorPrompt")
-                    if err then
-                        print("[RECONNECT] Phat hien bi Kick. Dang quay lai...")
-                        TeleportService:Teleport(game.PlaceId, lp)
-                    end
+            if prompt and prompt:FindFirstChild("promptOverlay") then
+                local overlay = prompt.promptOverlay
+                if overlay:FindFirstChild("ErrorPrompt") then
+                    TeleportService:Teleport(game.PlaceId, lp)
                 end
             end
         end)
@@ -59,19 +56,35 @@ task.spawn(function()
     end
 end)
 
+-- [2] FAST PICKUP TASK (Chạy nền liên tục)
+task.spawn(function()
+    while true do
+        if settings.enabled then
+            pcall(function()
+                local dropped = workspace:FindFirstChild("droppedItems")
+                if dropped then
+                    for _, item in ipairs(dropped:GetChildren()) do
+                        if item:IsA("BasePart") then
+                            local d = (getHRP().Position - item.Position).Magnitude
+                            if d < 50 then
+                                pickupRemote:FireServer(item)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(0.2)
+    end
+end)
+
 -- HELPERS
 local function liteUIWipe()
-    -- Thay vì Destroy, chúng ta chỉ ẩn đi để tránh lỗi script hệ thống (như AvatarUI)
     local targets = {"Avatar", "AvatarUI", "SpawnUI", "Menu", "Intro", "MainGui", "Announcements", "News", "Loading"}
     for _, name in ipairs(targets) do
         local ui = lp.PlayerGui:FindFirstChild(name)
-        if ui and ui:IsA("ScreenGui") then 
-            pcall(function() ui.Enabled = false end) 
-        elseif ui then
-            pcall(function() ui.Parent = nil end) -- Thử gỡ bỏ mà không xóa hẳn nếu không phải ScreenGui
-        end
+        if ui and ui:IsA("ScreenGui") then pcall(function() ui.Enabled = false end) end
     end
-    -- Chỉ xóa hoàn toàn các GUI cũ của script
     for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
         if gui.Name == "WoodFarmStatus" or gui.Name == "AutoChopGui" then
             pcall(function() gui:Destroy() end)
@@ -79,15 +92,12 @@ local function liteUIWipe()
     end
 end
 
-local function getHRP()
-    return lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-end
+function getHRP() return lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") end
 
 -- HÀM TÌM CÂY GẦN NHẤT
 local function getNearestTree()
     local choppable = workspace:FindFirstChild("worldResources") and workspace.worldResources:FindFirstChild("choppable")
     if not choppable then return nil, nil end
-
     local hrp = getHRP()
     if not hrp then return nil, nil end
 
@@ -95,17 +105,13 @@ local function getNearestTree()
     for _, segment in ipairs(choppable:GetChildren()) do
         for _, tree in ipairs(segment:GetChildren()) do
             local n = tree.Name:lower()
-            -- Blacklist rác
             if not n:find("mushroom") and not n:find("bush") and not n:find("shrub") then
                 local health = tree:GetAttribute("health")
                 if health == nil or health > 0 then
                     local pos = tree:IsA("PVInstance") and tree:GetPivot().Position
                     if pos then
                         local d = (hrp.Position - pos).Magnitude
-                        if d < minDist then
-                            minDist = d
-                            nearest = tree
-                        end
+                        if d < minDist then minDist = d; nearest = tree end
                     end
                 end
             end
@@ -114,23 +120,26 @@ local function getNearestTree()
     return nearest, minDist
 end
 
--- VÒNG LẶP CHOP CHÍNH
+-- VÒNG LẶP CHOP CHÍNH (TURBO)
 local function startChopping(tree)
     if not tree or not tree.Parent then return end
-    
     local tool = (lp.Character and lp.Character:FindFirstChild(tostring(settings.toolSlot)))
                or (lp.Backpack and lp.Backpack:FindFirstChild(tostring(settings.toolSlot)))
     if tool and toolCheck then pcall(function() toolCheck:InvokeServer(tool) end) end
 
     local startTime = tick()
-    while settings.enabled and tree and tree.Parent and (tick() - startTime < 10) do
+    while settings.enabled and tree and tree.Parent and (tick() - startTime < 8) do
         local h = tree:GetAttribute("health")
         if h and h <= 0 then break end
         
+        -- Turbo FIRE (3 lần mỗi frame)
         pcall(function()
-            chopRemote:FireServer(settings.toolSlot, tree, tree:GetPivot())
+            local cf = tree:GetPivot()
+            chopRemote:FireServer(settings.toolSlot, tree, cf)
+            chopRemote:FireServer(settings.toolSlot, tree, cf)
+            chopRemote:FireServer(settings.toolSlot, tree, cf)
         end)
-        task.wait(settings.delay) -- 0.05s
+        task.wait(settings.delay)
     end
 end
 
@@ -138,77 +147,64 @@ local function smartTeleport(cf, tree)
     settings.isTeleporting = true
     settings.targetCF = cf
     settings.targetTree = tree
-    print("=> [RESPAWN TP]: Reset de di chuyen xa...")
     pcall(function() resetRemote:InvokeServer() end)
-    task.wait(0.5)
+    task.wait(0.3)
     pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end)
 end
 
 local function farmLoop()
     if not settings.enabled then return end
-    
     local tree, dist = getNearestTree()
     if tree then
         local targetPos = tree:GetPivot().Position
         local targetCF = CFrame.new(targetPos + Vector3.new(0, 5, 0))
         local hrp = getHRP()
-        
         if hrp then
             if dist < 50 then
-                -- INSTANT TP SIÊU TỐC
-                print("=> [INSTANT TP]: " .. tree.Name)
-                for _ = 1, 3 do
+                for _ = 1, 2 do
                     hrp.CFrame = targetCF
                     hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                    task.wait(0.01)
+                    task.wait()
                 end
                 startChopping(tree)
                 task.spawn(farmLoop)
             else
-                print("=> [SMART TP]: " .. tree.Name)
                 smartTeleport(targetCF, tree)
             end
         end
     else
-        print("=> Hết cây. Đang đợi hoặc đổi server...")
-        task.wait(2)
+        task.wait(1)
         farmLoop()
     end
 end
 
--- CHARACTER ADDED logic
+-- CHARACTER ADDED (ULTRA FAST)
 lp.CharacterAdded:Connect(function(char)
     liteUIWipe()
     task.spawn(function()
-        local hrp = char:WaitForChild("HumanoidRootPart", 10)
+        local hrp = char:WaitForChild("HumanoidRootPart", 5)
         if not hrp then return end
-        task.wait(0.3)
+        task.wait() -- Minimal delay
 
         if settings.isTeleporting and settings.targetCF then
-            -- STICKY TP về cây mục tiêu
-            print("=> [STICKY TP] -> Target")
-            for _ = 1, 10 do
+            for _ = 1, 8 do
                 if not hrp or not hrp.Parent then break end
                 hrp.CFrame = settings.targetCF
                 hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                task.wait(0.05)
+                task.wait()
             end
             settings.isTeleporting = false
-            
             local tree = settings.targetTree
             settings.targetTree = nil
             if tree then startChopping(tree) end
-            task.spawn(farmLoop)
         else
-            -- SPAWN TP về bãi farm cố định
-            print("=> [SPAWN TP] -> Home")
-            for _ = 1, 10 do
+            for _ = 1, 8 do
                 if not hrp or not hrp.Parent then break end
                 hrp.CFrame = settings.spawnPos
-                task.wait(0.05)
+                task.wait()
             end
-            task.spawn(farmLoop)
         end
+        task.spawn(farmLoop)
     end)
 end)
 
@@ -216,53 +212,42 @@ end)
 local function setupGUI()
     pcall(function()
         if lp.PlayerGui:FindFirstChild("AutoChopGui") then lp.PlayerGui.AutoChopGui:Destroy() end
-        local ScreenGui = Instance.new("ScreenGui")
+        local ScreenGui = Instance.new("ScreenGui", CoreGui)
         ScreenGui.Name = "AutoChopGui"
-        if gethui then ScreenGui.Parent = gethui() else ScreenGui.Parent = game:GetService("CoreGui") end
+        
+        local Main = Instance.new("Frame", ScreenGui)
+        Main.Size = UDim2.new(0, 180, 0, 110)
+        Main.Position = UDim2.new(0, 10, 0, 50)
+        Main.BackgroundColor3 = Color3.fromRGB(30,30,30)
+        Main.Draggable = true; Main.Active = true
+        Instance.new("UICorner", Main)
 
-        local Main = Instance.new("Frame")
-        Main.Size = UDim2.new(0, 200, 0, 150)
-        Main.Position = UDim2.new(0, 50, 0, 50) -- Góc trái cho gọn
-        Main.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        Main.Draggable = true
-        Main.Active = true
-        Main.Parent = ScreenGui
-        Instance.new("UICorner").Parent = Main
-
-        local Title = Instance.new("TextLabel")
-        Title.Size = UDim2.new(1, 0, 0, 35)
-        Title.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-        Title.Text = "WOOD v3.3 RECONNECT"
+        local Title = Instance.new("TextLabel", Main)
+        Title.Size = UDim2.new(1,0,0,30)
+        Title.Text = "WOOD v3.4 TURBO"
         Title.TextColor3 = Color3.new(1,1,1)
-        Title.Font = Enum.Font.GothamBold
-        Title.Parent = Main
+        Title.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
         Instance.new("UICorner", Title)
 
-        local StartBtn = Instance.new("TextButton")
-        StartBtn.Size = UDim2.new(0.9, 0, 0, 50)
-        StartBtn.Position = UDim2.new(0.05, 0, 0, 50)
-        StartBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-        StartBtn.Text = "DỪNG FARM"
-        StartBtn.TextColor3 = Color3.new(1,1,1)
-        StartBtn.Font = Enum.Font.GothamBold
-        StartBtn.Parent = Main
-        Instance.new("UICorner", StartBtn)
+        local Btn = Instance.new("TextButton", Main)
+        Btn.Size = UDim2.new(0.9,0,0,60)
+        Btn.Position = UDim2.new(0.05,0,0,40)
+        Btn.Text = "DỪNG FARM"
+        Btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+        Btn.TextColor3 = Color3.new(1,1,1)
+        Instance.new("UICorner", Btn)
 
-        StartBtn.MouseButton1Click:Connect(function()
+        Btn.MouseButton1Click:Connect(function()
             settings.enabled = not settings.enabled
-            StartBtn.Text = settings.enabled and "DỪNG FARM" or "BẮT ĐẦU FARM"
-            StartBtn.BackgroundColor3 = settings.enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 150, 0)
+            Btn.Text = settings.enabled and "DỪNG FARM" or "BẮT ĐẦU FARM"
+            Btn.BackgroundColor3 = settings.enabled and Color3.fromRGB(200,0,0) or Color3.fromRGB(0,200,0)
             if settings.enabled then task.spawn(farmLoop) end
         end)
     end)
 end
 
--- INIT
-liteUIWipe()
 setupGUI()
-print("Wood v3.3 Loaded.")
-
--- Lần đầu chạy: Respawn để về bãi farm
+print("Wood v3.4 Insane Speed Loaded.")
 pcall(function() resetRemote:InvokeServer() end)
-task.wait(0.3)
+task.wait(0.2)
 pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end)
