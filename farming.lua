@@ -477,22 +477,34 @@ while true do
     
     local hrp = getHRP()
     local hum = getHum()
-    if not hrp or not hum or hum.Health <= 0 then
+    if not hrp or not hum then
         waitForAlive()
         hrp = getHRP()
+        hum = getHum()
     end
 
-    -- 1. Anti-Kill (Đổi server nếu mất máu)
-    local damageConn
-    local lastHp = hum.Health
-    damageConn = hum.HealthChanged:Connect(function(currentHp)
-        if currentHp < lastHp - 5 then
-            log("CẢNH BÁO: Bị tấn công! Mất " .. math.floor(lastHp - currentHp) .. " máu. Đang đổi server...")
-            if damageConn then damageConn:Disconnect() end
-            serverHop("Bị player tấn công")
-        end
-        lastHp = currentHp
-    end)
+    -- 1. Anti-Kill (Chạy nền để giám sát liên tục)
+    if not _G.AntiKillActive then
+        _G.AntiKillActive = true
+        task.spawn(function()
+            local lastHp = hum and hum.Health or 100
+            while true do
+                local c = lp.Character
+                local h = c and c:FindFirstChildOfClass("Humanoid")
+                if h and h.Health > 0 then
+                    if h.Health < (lastHp - 5) then
+                        log("⚔️ BỊ TẤN CÔNG! Đang đổi server khẩn cấp...")
+                        serverHop("Bị player tấn công")
+                        break
+                    end
+                    lastHp = h.Health
+                else
+                    lastHp = 100 -- Reset khi chết
+                end
+                task.wait(1)
+            end
+        end)
+    end
 
     -- 2. Di chuyển tới khu vực farm
     local dist = (hrp.Position - FARM_CENTER).Magnitude
