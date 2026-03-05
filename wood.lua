@@ -40,12 +40,7 @@ local toolCheck     = toolRemotes and toolRemotes:WaitForChild("CheckToolSetup",
 
 -- ==================== CONFIG ====================
 -- ★ Tọa độ spawn cố định (khu vực nhiều cây gỗ)
-local SPAWN_POS = CFrame.new(
-    -104.706573, 24.2193909, 206.016602,
-     0.769942045, 0, -0.638113856,
-     0,           1,  0,
-     0.638113856, 0,  0.769942045
-)
+local SPAWN_POS = CFrame.new(96, 22.0625, 52)
 local TOOL_SLOT     = 4
 local SCAN_RANGE    = 5000
 local LOOT_RANGE    = 80
@@ -296,11 +291,11 @@ end
 local function instantTP(cf)
     local hrp = getHRP()
     if not hrp then return end
-    for _ = 1, 8 do
+    for _ = 1, 3 do -- Giảm từ 8 xuống 3 để TP siêu tốc
         if not hrp.Parent then break end
         hrp.CFrame = cf
         hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-        task.wait(0.03)
+        task.wait(0.01)
     end
 end
 
@@ -333,7 +328,9 @@ local function farmLoop()
     end
     state.lastTargetPos = targetPos
 
-    if dist < 50 then
+    if dist < 5 then -- Cực gần thì không cần TP
+        startChopping(tree)
+    elseif dist < 50 then
         -- ★ INSTANT TP (< 50 studs)
         instantTP(targetCF)
         startChopping(tree)
@@ -345,6 +342,7 @@ local function farmLoop()
         return -- farmLoop sẽ tiếp tục từ CharacterAdded
     end
 
+    task.wait(0.05) -- Nghỉ ngắn để ổn định
     task.spawn(farmLoop)
 end
 
@@ -359,11 +357,11 @@ lp.CharacterAdded:Connect(function(char)
         if state.isTeleporting and state.targetCF then
             -- Đến đúng cây đang chặt
             log("[STICKY TP] → Cây mục tiêu")
-            for _ = 1, 20 do
+            for _ = 1, 10 do -- Giảm từ 20 xuống 10
                 if not hrp.Parent then break end
                 hrp.CFrame = state.targetCF
                 hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                task.wait(0.08)
+                task.wait(0.04) -- Giảm delay để sẵn sàng nhanh hơn
             end
             state.isTeleporting = false
             state.lastSuccess = tick()
@@ -373,11 +371,11 @@ lp.CharacterAdded:Connect(function(char)
         else
             -- ★ SPAWN BÌNH THƯỜNG → TP VỀ ĐIỂM FARM CỐ ĐỊNH
             log("[SPAWN TP] → (96, 22, 52)")
-            for _ = 1, 20 do
+            for _ = 1, 10 do -- Giảm từ 20 xuống 10
                 if not hrp.Parent then break end
                 hrp.CFrame = SPAWN_POS
                 hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                task.wait(0.08)
+                task.wait(0.04)
             end
             state.lastSuccess = tick()
         end
