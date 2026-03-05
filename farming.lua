@@ -1,7 +1,15 @@
--- ============================================================
--- FARMING STANDALONE - HỆ THỐNG TRỒNG TRỌT ĐỘC LẬP
--- Paste vào executor là chạy ngay, không cần file khác
--- ============================================================
+--[[
+    FARMING.LUA - v3.1 (UI Cleanup)
+]]
+
+local function cleanupOldFarm()
+    for _, gui in ipairs(game:GetService("Players").LocalPlayer.PlayerGui:GetChildren()) do
+        if gui.Name == "StandaloneFarmUI" then
+            pcall(function() gui:Destroy() end)
+        end
+    end
+end
+cleanupOldFarm()
 
 -- ==================== CẤU HÌNH (CONFIG) ====================
 local CFG = {

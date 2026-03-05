@@ -1,9 +1,15 @@
 --[[
-    CORE.LUA - THE BRAIN (BỘ NÃO ĐIỀU PHỐI) - v1.6.8
-    - Chống spam Remote Respawn (Cooldown 5s)
-    - Fix lỗi cú pháp toàn hệ thống (Farming/Mining/Crafting)
-    - Toàn cục hóa _G.forceSpawn (Remote-based)
+    CORE.LUA - THE BRAIN (BỘ NÃO ĐIỀU PHỐI) - v1.7.0
+    - Singleton protection (_G.CoreLoaded)
+    - Anti-Redundant Run (_G.RunningScript)
 ]]
+
+if _G.CoreLoaded then
+    print("[CORE] Da co 1 phien ban dang chay. Khong chay them.")
+    return
+end
+_G.CoreLoaded = true
+_G.RunningScript = nil
 
 -- ==================== CONFIG ====================
 local CONFIG = {
@@ -281,6 +287,8 @@ task.spawn(function()
 end)
 
 local function runLocalScript(filename)
+    if _G.RunningScript == filename then return true end -- Đã chạy rồi thì không chạy lại
+    
     local content = nil
     log("Đang tải: " .. filename)
 
@@ -316,10 +324,16 @@ local function runLocalScript(filename)
     end
 
     if content then
+        _G.RunningScript = filename -- Đánh dấu script đang chạy
         log("Run: " .. filename)
         task.spawn(function()
             local func, err = loadstring(content)
-            if func then func() else warn("Lỗi load " .. filename .. ": " .. tostring(err)) end
+            if func then 
+                func() 
+            else 
+                warn("Lỗi load " .. filename .. ": " .. tostring(err))
+                _G.RunningScript = nil
+            end
         end)
         return true
     else
