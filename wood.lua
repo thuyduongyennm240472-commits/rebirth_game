@@ -1,8 +1,9 @@
 --[[
-    WOOD.LUA v4.1 - REALLY FIXED (REMOTE HANG FIX)
-    - Fix: truly dynamic remote detection (no more cached nil ri)
-    - Fix: UI Status update logic
-    - Version: v4.1
+    WOOD.LUA v4.2 - UNIVERSAL SPAWNER
+    - Fix: Unified Auto-Spawn (Remote + UI Clicker fallback)
+    - Fix: Robust Character Detection (No more "Waiting" hang)
+    - Feature: Deep Remote Search (Finds hidden remotes)
+    - Version: v4.2
 ]]
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -15,31 +16,31 @@ local TeleportService   = game:GetService("TeleportService")
 local CoreGui           = game:GetService("CoreGui")
 
 local function debugLog(msg)
-    print("[WOOD v4.1]: " .. tostring(msg))
+    print("[WOOD v4.2]: " .. tostring(msg))
 end
 
--- [TRUE DYNAMIC REMOTES]
--- Không bao giờ cache biến ri ở trên đầu để tránh lỗi khi nạp sớm
-local function getRemote(folderName, remoteName)
+-- [DEEP REMOTE SEARCH] Tìm remote bất kể nó nằm ở đâu
+local function findRemoteRecursive(parent, name)
+    for _, child in ipairs(parent:GetChildren()) do
+        if child.Name == name and (child:IsA("RemoteEvent") or child:IsA("RemoteFunction")) then
+            return child
+        end
+        local found = findRemoteRecursive(child, name)
+        if found then return found end
+    end
+    return nil
+end
+
+local function getRemote(name)
     local ri = ReplicatedStorage:FindFirstChild("remoteInterface")
     if not ri then return nil end
-    local folder = ri:FindFirstChild(folderName)
-    if not folder then return nil end
-    return folder:FindFirstChild(remoteName)
+    return findRemoteRecursive(ri, name)
 end
 
-local function getChop() return getRemote("interactions", "chop") end
-local function getReset() return getRemote("character", "reset") end
-local function getRespawn() return getRemote("character", "respawn") end
-local function getPickup() 
-    local pk = getRemote("interactions", "pickupItem")
-    if not pk then
-        local ri = ReplicatedStorage:FindFirstChild("remoteInterface")
-        local inv = ri and ri:FindFirstChild("inventory")
-        pk = inv and inv:FindFirstChild("pickupItem")
-    end
-    return pk
-end
+local function getChop() return getRemote("chop") end
+local function getReset() return getRemote("reset") end
+local function getRespawn() return getRemote("respawn") end
+local function getPickup() return getRemote("pickupItem") end
 
 local settings = {
     enabled = true,
@@ -53,35 +54,53 @@ local settings = {
     respawnArgs = {15382674, 12, 2, 17, 15382674, 15382674, false}
 }
 
+-- [SAFE HRP CHECK] Đảm bảo nhân vật thực sự ở trong game
 local function getHRP()
-    local char = lp.Character or workspace:FindFirstChild(lp.Name)
-    return char and char:FindFirstChild("HumanoidRootPart")
+    local char = lp.Character or (workspace:FindFirstChild(lp.Name))
+    if char and char.Parent == workspace then
+        return char:FindFirstChild("HumanoidRootPart")
+    end
+    return nil
 end
 
--- [1] AUTO-SPAWN CLICKER
-task.spawn(function()
-    while true do
-        if not getHRP() then
-            pcall(function()
-                local pg = lp:FindFirstChild("PlayerGui")
-                if pg then
-                    for _, g in ipairs(pg:GetChildren()) do
-                        if g:IsA("ScreenGui") and g.Enabled then
-                            for _, b in ipairs(g:GetDescendants()) do
-                                if b:IsA("TextButton") and b.Visible then
-                                    local t = b.Text:lower()
-                                    if t:find("spawn") or t:find("play") or t:find("pick") then
-                                        debugLog("Auto Clicking: " .. b.Text)
-                                        for _, c in ipairs(getconnections(b.MouseButton1Click)) do c:Fire() end
-                                    end
+-- [1] UNIVERSAL SPAWNER (UI + Remote)
+local function forceSpawn()
+    debugLog("Attempting Universal Spawn...")
+    -- Cách 1: Remote (Nếu có)
+    local rsp = getRespawn()
+    if rsp then pcall(function() rsp:InvokeServer(unpack(settings.respawnArgs)) end) end
+    
+    -- Cách 2: UI Clicker (Duyệt sâu mọi nút)
+    pcall(function()
+        local pg = lp:FindFirstChild("PlayerGui")
+        if pg then
+            for _, g in ipairs(pg:GetChildren()) do
+                if g:IsA("ScreenGui") and g.Enabled then
+                    for _, b in ipairs(g:GetDescendants()) do
+                        if b:IsA("TextButton") and b.Visible and b.TextSize > 0 then
+                            local t = b.Text:lower()
+                            if t:find("spawn") or t:find("play") or t:find("pick") then
+                                debugLog("Clicking: " .. b.Text)
+                                -- Compatibility Click
+                                if getconnections then
+                                    for _, c in ipairs(getconnections(b.MouseButton1Click)) do c:Fire() end
+                                    for _, c in ipairs(getconnections(b.Activated)) do c:Fire() end
                                 end
+                                -- Fallback logic
+                                b.Size = UDim2.new(1,0,1,0) -- Ép nút to ra để dễ click (nếu cần)
                             end
                         end
                     end
                 end
-            end)
+            end
         end
-        task.wait(1)
+    end)
+end
+
+task.spawn(function()
+    while true do
+        if not getHRP() then forceSpawn() end
+        task.wait(2)
     end
 end)
 
@@ -94,11 +113,11 @@ task.spawn(function()
             pcall(function()
                 local choppable = workspace:FindFirstChild("worldResources") and workspace.worldResources:FindFirstChild("choppable")
                 if choppable then
+                    local myPos = hrp.Position
                     for _, seg in ipairs(choppable:GetChildren()) do
                         for _, tree in ipairs(seg:GetChildren()) do
                             if tree:GetAttribute("health") == nil or tree:GetAttribute("health") > 0 then
-                                local tpos = tree:GetPivot().Position
-                                if (tpos - hrp.Position).Magnitude < settings.killAuraRange then
+                                if (tree:GetPivot().Position - myPos).Magnitude < settings.killAuraRange then
                                     local cf = tree:GetPivot()
                                     chop:FireServer(settings.toolSlot, tree, cf)
                                     chop:FireServer(settings.toolSlot, tree, cf)
@@ -113,7 +132,7 @@ task.spawn(function()
     end
 end)
 
--- [3] PICKUP
+-- [3] FAST PICKUP
 task.spawn(function()
     while true do
         local hrp = getHRP()
@@ -122,8 +141,9 @@ task.spawn(function()
             pcall(function()
                 local dropped = workspace:FindFirstChild("droppedItems")
                 if dropped then
+                    local myPos = hrp.Position
                     for _, item in ipairs(dropped:GetChildren()) do
-                        if item:IsA("BasePart") and (item.Position - hrp.Position).Magnitude < 100 then
+                        if item:IsA("BasePart") and (item.Position - myPos).Magnitude < 100 then
                             pk:FireServer(item)
                         end
                     end
@@ -135,13 +155,13 @@ task.spawn(function()
 end)
 
 local function smartTeleport(cf)
+    debugLog("Smart TP: Respawning...")
     settings.isTeleporting = true
     settings.targetCF = cf
     local rst = getReset()
-    local rsp = getRespawn()
-    if rst then rst:InvokeServer() end
+    if rst then pcall(function() rst:InvokeServer() end) end
     task.wait(0.3)
-    if rsp then rsp:InvokeServer(unpack(settings.respawnArgs)) end
+    forceSpawn()
 end
 
 local function getNearestTree()
@@ -152,8 +172,8 @@ local function getNearestTree()
     for _, seg in ipairs(choppable:GetChildren()) do
         for _, tree in ipairs(seg:GetChildren()) do
             if tree:GetAttribute("health") == nil or tree:GetAttribute("health") > 0 then
-                local dist = (tree:GetPivot().Position - hrp.Position).Magnitude
-                if dist < minDist then minDist = dist; nearest = tree end
+                local d = (tree:GetPivot().Position - hrp.Position).Magnitude
+                if d < minDist then minDist = d; nearest = tree end
             end
         end
     end
@@ -163,28 +183,25 @@ end
 local function farmLoop()
     if not settings.enabled then return end
     local hrp = getHRP()
-    if not hrp then 
-        task.wait(1)
-        return farmLoop()
-    end
+    if not hrp then task.wait(1); return farmLoop() end
 
     local tree, dist = getNearestTree()
     if tree then
         local targetCF = tree:GetPivot() + Vector3.new(0, 5, 0)
         if dist < 50 then
             hrp.CFrame = targetCF
+            hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
             task.wait(0.5)
             farmLoop()
         else
             smartTeleport(targetCF)
         end
     else
-        task.wait(1)
-        farmLoop()
+        task.wait(1); farmLoop()
     end
 end
 
--- [INIT FLOW]
+-- [CHARACTER EVENT]
 lp.CharacterAdded:Connect(function(char)
     task.wait(0.5)
     local hrp = char:WaitForChild("HumanoidRootPart", 10)
@@ -195,8 +212,8 @@ lp.CharacterAdded:Connect(function(char)
         else
             for i = 1, 5 do hrp.CFrame = settings.spawnPos; task.wait() end
         end
+        task.spawn(farmLoop)
     end
-    task.spawn(farmLoop)
 end)
 
 -- GUI
@@ -204,35 +221,20 @@ local function setupGUI()
     if lp.PlayerGui:FindFirstChild("AutoChopGui") then lp.PlayerGui.AutoChopGui:Destroy() end
     local ScreenGui = Instance.new("ScreenGui", CoreGui)
     ScreenGui.Name = "AutoChopGui"
-    local Main = Instance.new("Frame", ScreenGui)
-    Main.Size = UDim2.new(0, 200, 0, 100)
-    Main.Position = UDim2.new(0, 10, 0, 50)
-    Main.BackgroundColor3 = Color3.new(0,0,0)
+    local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 200, 0, 100); Main.Position = UDim2.new(0, 10, 0, 50); Main.BackgroundColor3 = Color3.new(0,0,0)
     Instance.new("UICorner", Main)
-    local Title = Instance.new("TextLabel", Main)
-    Title.Size = UDim2.new(1,0,0,30)
-    Title.Text = "WOOD v4.1 REAL FIX"
-    Title.TextColor3 = Color3.new(1,1,1)
-    Title.BackgroundColor3 = Color3.new(0,0.5,0)
-    local Status = Instance.new("TextLabel", Main)
-    Status.Size = UDim2.new(1,0,0,30)
-    Status.Position = UDim2.new(0,0,1,-30)
-    Status.Text = "Initializing..."
-    Status.TextColor3 = Color3.new(1,1,1)
-    Status.BackgroundTransparency = 1
-    Status.Parent = Main
+    local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1,0,0,30); Title.Text = "WOOD v4.2 UNIVERSAL"; Title.TextColor3 = Color3.new(1,1,1); Title.BackgroundColor3 = Color3.fromRGB(200, 100, 0); Instance.new("UICorner", Title)
+    local Status = Instance.new("TextLabel", Main); Status.Size = UDim2.new(1,0,0,30); Status.Position = UDim2.new(0,0,1,-30); Status.Text = "Starting..."; Status.TextColor3 = Color3.new(1,1,1); Status.BackgroundTransparency = 1; Status.Parent = Main
     
     task.spawn(function()
         while ScreenGui.Parent do
-            local ra = ReplicatedStorage:FindFirstChild("remoteInterface")
-            if not ra then Status.Text = "WAITING FOR REMOTES..."
-            elseif not getHRP() then Status.Text = "WAITING FOR CHARACTER..."
-            else Status.Text = "FARMING ACTIVE" end
+            local hrp = getHRP()
+            if not hrp then Status.Text = "WAITING FOR SPAWN..." else Status.Text = "SPEED OK | FARMING..." end
             task.wait(1)
         end
     end)
 end
 
 setupGUI()
-debugLog("v4.1 Loaded. Starting...")
-task.spawn(farmLoop)
+debugLog("Wood v4.2 Loaded.")
+if getHRP() then task.spawn(farmLoop) else forceSpawn() end
