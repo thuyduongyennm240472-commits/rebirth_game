@@ -15,17 +15,23 @@ local HttpService       = game:GetService("HttpService")
 local RunService        = game:GetService("RunService")
 local CoreGui           = game:GetService("CoreGui")
 
--- REMOTE INTERFACES (NON-BLOCKING)
-local ri = ReplicatedStorage:FindFirstChild("remoteInterface")
-local intRemotes = ri and ri:FindFirstChild("interactions")
-local charRemotes = ri and ri:FindFirstChild("character")
-local toolRemotes = ri and ri:FindFirstChild("Tools")
+-- REMOTE INTERFACES (DYNAMIC)
+local function getRemote(folder, name)
+    local f = ri and ri:FindFirstChild(folder)
+    return f and f:FindFirstChild(name)
+end
 
-local chopRemote    = intRemotes and intRemotes:FindFirstChild("chop")
-local resetRemote   = charRemotes and charRemotes:FindFirstChild("reset")
-local respawnRemote = charRemotes and charRemotes:FindFirstChild("respawn")
-local pickupRemote  = (intRemotes and intRemotes:FindFirstChild("pickupItem")) or (ri and ri:FindFirstChild("inventory") and ri.inventory:FindFirstChild("pickupItem"))
-local toolCheck     = toolRemotes and toolRemotes:FindFirstChild("CheckToolSetup")
+-- Chức năng lấy remote linh hoạt
+local function getChop() return getRemote("interactions", "chop") end
+local function getReset() return getRemote("character", "reset") end
+local function getRespawn() return getRemote("character", "respawn") end
+local function getPickup() 
+    return getRemote("interactions", "pickupItem") or (ri and ri:FindFirstChild("inventory") and ri.inventory:FindFirstChild("pickupItem"))
+end
+local function getToolCheck()
+    local t = ri and ri:FindFirstChild("Tools")
+    return t and t:FindFirstChild("CheckToolSetup")
+end
 
 local settings = {
     enabled       = true,
@@ -58,7 +64,8 @@ end)
 -- [2] FAST PICKUP TASK (Chạy nền liên tục)
 task.spawn(function()
     while true do
-        if settings.enabled then
+        local pickup = getPickup()
+        if settings.enabled and pickup then
             pcall(function()
                 local dropped = workspace:FindFirstChild("droppedItems")
                 if dropped then
@@ -66,7 +73,7 @@ task.spawn(function()
                         if item:IsA("BasePart") then
                             local d = (getHRP().Position - item.Position).Magnitude
                             if d < 50 then
-                                pickupRemote:FireServer(item)
+                                pickup:FireServer(item)
                             end
                         end
                     end
@@ -121,10 +128,12 @@ end
 
 -- VÒNG LẶP CHOP CHÍNH (TURBO)
 local function startChopping(tree)
-    if not tree or not tree.Parent or not chopRemote then return end
+    local chop = getChop()
+    if not tree or not tree.Parent or not chop then return end
     local tool = (lp.Character and lp.Character:FindFirstChild(tostring(settings.toolSlot)))
                or (lp.Backpack and lp.Backpack:FindFirstChild(tostring(settings.toolSlot)))
-    if tool and toolCheck then pcall(function() toolCheck:InvokeServer(tool) end) end
+    local tck = getToolCheck()
+    if tool and tck then pcall(function() tck:InvokeServer(tool) end) end
 
     local startTime = tick()
     while settings.enabled and tree and tree.Parent and (tick() - startTime < 8) do
@@ -134,9 +143,9 @@ local function startChopping(tree)
         -- Turbo FIRE (3 lần mỗi frame)
         pcall(function()
             local cf = tree:GetPivot()
-            chopRemote:FireServer(settings.toolSlot, tree, cf)
-            chopRemote:FireServer(settings.toolSlot, tree, cf)
-            chopRemote:FireServer(settings.toolSlot, tree, cf)
+            chop:FireServer(settings.toolSlot, tree, cf)
+            chop:FireServer(settings.toolSlot, tree, cf)
+            chop:FireServer(settings.toolSlot, tree, cf)
         end)
         task.wait(settings.delay)
     end
@@ -146,9 +155,11 @@ local function smartTeleport(cf, tree)
     settings.isTeleporting = true
     settings.targetCF = cf
     settings.targetTree = tree
-    if resetRemote then pcall(function() resetRemote:InvokeServer() end) end
+    local rst = getReset()
+    local rsp = getRespawn()
+    if rst then pcall(function() rst:InvokeServer() end) end
     task.wait(0.3)
-    if respawnRemote then pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end) end
+    if rsp then pcall(function() rsp:InvokeServer(unpack(settings.respawnArgs)) end) end
 end
 
 local function farmLoop()
@@ -247,6 +258,8 @@ end
 
 setupGUI()
 print("Wood v3.5 EMERGENCY FIXED Loaded.")
-if resetRemote then pcall(function() resetRemote:InvokeServer() end) end
+local rst = getReset()
+local rsp = getRespawn()
+if rst then pcall(function() rst:InvokeServer() end) end
 task.wait(0.2)
-if respawnRemote then pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end) end
+if rsp then pcall(function() rsp:InvokeServer(unpack(settings.respawnArgs)) end) end
