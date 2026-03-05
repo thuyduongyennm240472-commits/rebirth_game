@@ -1,9 +1,8 @@
 --[[
-    WOOD.LUA v4.3 - WATER & PERFORMANCE UPDATE
-    - Feature: Remove Water Optimization (Lag Reducer from Farming/Mining)
-    - Feature: Water Remote Support (Support for drinking/watering)
-    - Fix: Unified Universal Spawner
-    - Version: v4.3
+    WOOD.LUA v4.4 - ULTIMATE CHARACTER DETECTION
+    - Fix: Character detection (Removed strict parent check)
+    - Fix: Status GUI update
+    - Version: v4.4
 ]]
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -18,7 +17,7 @@ local RunService        = game:GetService("RunService")
 local CoreGui           = game:GetService("CoreGui")
 
 local function debugLog(msg)
-    print("[WOOD v4.3]: " .. tostring(msg))
+    print("[WOOD v4.4]: " .. tostring(msg))
 end
 
 -- [OPTIMIZATION: REMOVE WATER]
@@ -43,28 +42,19 @@ local function nuclearScan()
     end
 end
 
-local function toggleSwim(disable)
+local function removeWater()
+    nukeLighting()
+    nuclearScan()
     pcall(function()
         local ps = lp:FindFirstChild("PlayerScripts")
         if ps then
             for _, s in ipairs(ps:GetChildren()) do
-                if s.Name:lower():find("swim") then s.Disabled = disable end
+                if s.Name:lower():find("swim") then s.Disabled = true end
             end
         end
     end)
-end
-
-local function removeWater()
-    nukeLighting()
-    nuclearScan()
-    toggleSwim(true)
-    pcall(function()
-        local char = lp.Character or workspace:FindFirstChild(lp.Name)
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, false) end
-    end)
     RunService.Heartbeat:Connect(nuclearScan)
-    debugLog("Water Removed & Lighting Nuked (Lag Reducer ON)")
+    debugLog("Lag Reducer ACTIVE")
 end
 
 -- [DEEP REMOTE SEARCH]
@@ -89,7 +79,6 @@ local function getChop() return getRemote("chop") end
 local function getReset() return getRemote("reset") end
 local function getRespawn() return getRemote("respawn") end
 local function getPickup() return getRemote("pickupItem") end
-local function getWater() return getRemote("water") end
 
 local settings = {
     enabled = true,
@@ -103,9 +92,11 @@ local settings = {
     respawnArgs = {15382674, 12, 2, 17, 15382674, 15382674, false}
 }
 
+-- [FIXED HRP CHECK]
 local function getHRP()
     local char = lp.Character or workspace:FindFirstChild(lp.Name)
-    if char and char.Parent == workspace then
+    -- Nếu char nằm trong folder con của Workspace (như worldResources.Players) vẫn cho là đúng
+    if char and char:IsDescendantOf(workspace) then
         return char:FindFirstChild("HumanoidRootPart")
     end
     return nil
@@ -125,8 +116,10 @@ local function forceSpawn()
                         if b:IsA("TextButton") and b.Visible and b.TextSize > 0 then
                             local t = b.Text:lower()
                             if t:find("spawn") or t:find("play") or t:find("pick") then
-                                for _, c in ipairs(getconnections(b.MouseButton1Click)) do c:Fire() end
-                                for _, c in ipairs(getconnections(b.Activated)) do c:Fire() end
+                                if getconnections then
+                                    for _, c in ipairs(getconnections(b.MouseButton1Click)) do c:Fire() end
+                                    for _, c in ipairs(getconnections(b.Activated)) do c:Fire() end
+                                end
                             end
                         end
                     end
@@ -139,22 +132,7 @@ end
 task.spawn(function()
     while true do
         if not getHRP() then forceSpawn() end
-        task.wait(2)
-    end
-end)
-
--- [WATER INTERACTION SUPPORT]
-task.spawn(function()
-    while true do
-        if settings.enabled then
-            local waterR = getWater()
-            if waterR then
-                -- Nếu có water remote, có thể gọi định kỳ hoặc khi cần (Tùy game)
-                -- Ở đây hỗ trợ cho việc tưới/uống nếu game yêu cầu FireServer đơn giản
-                pcall(function() waterR:FireServer() end)
-            end
-        end
-        task.wait(10)
+        task.wait(3)
     end
 end)
 
@@ -274,13 +252,13 @@ local function setupGUI()
     local ScreenGui = Instance.new("ScreenGui", CoreGui); ScreenGui.Name = "AutoChopGui"
     local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 200, 0, 100); Main.Position = UDim2.new(0, 10, 0, 50); Main.BackgroundColor3 = Color3.new(0,0,0)
     Instance.new("UICorner", Main)
-    local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1,0,0,30); Title.Text = "WOOD v4.3 + WATER"; Title.TextColor3 = Color3.new(1,1,1); Title.BackgroundColor3 = Color3.fromRGB(0, 150, 200); Instance.new("UICorner", Title)
+    local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1,0,0,30); Title.Text = "WOOD v4.4 ULTIMATE"; Title.TextColor3 = Color3.new(1,1,1); Title.BackgroundColor3 = Color3.fromRGB(150, 0, 150); Instance.new("UICorner", Title)
     local Status = Instance.new("TextLabel", Main); Status.Size = UDim2.new(1,0,0,30); Status.Position = UDim2.new(0,0,1,-30); Status.Text = "Starting..."; Status.TextColor3 = Color3.new(1,1,1); Status.BackgroundTransparency = 1; Status.Parent = Main
     
     task.spawn(function()
         while ScreenGui.Parent do
             local hrp = getHRP()
-            if not hrp then Status.Text = "WAITING FOR SPAWN..." else Status.Text = "LAG REDUCER ON | FARMING" end
+            if not hrp then Status.Text = "WAITING FOR CHARACTER..." else Status.Text = "ACTIVE | FPS OPTIMIZED" end
             task.wait(1)
         end
     end)
@@ -288,5 +266,5 @@ end
 
 setupGUI()
 removeWater()
-debugLog("v4.3 Loaded. Speed & Water optimized.")
+debugLog("v4.4 Loaded. Character detection fixed.")
 if getHRP() then task.spawn(farmLoop) else forceSpawn() end
