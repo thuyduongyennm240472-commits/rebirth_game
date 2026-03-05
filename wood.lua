@@ -61,12 +61,17 @@ end)
 
 -- HELPERS
 local function liteUIWipe()
+    -- Thay vì Destroy, chúng ta chỉ ẩn đi để tránh lỗi script hệ thống (như AvatarUI)
     local targets = {"Avatar", "AvatarUI", "SpawnUI", "Menu", "Intro", "MainGui", "Announcements", "News", "Loading"}
     for _, name in ipairs(targets) do
         local ui = lp.PlayerGui:FindFirstChild(name)
-        if ui then pcall(function() ui:Destroy() end) end
+        if ui and ui:IsA("ScreenGui") then 
+            pcall(function() ui.Enabled = false end) 
+        elseif ui then
+            pcall(function() ui.Parent = nil end) -- Thử gỡ bỏ mà không xóa hẳn nếu không phải ScreenGui
+        end
     end
-    -- Dọn dẹp GUI cũ của script
+    -- Chỉ xóa hoàn toàn các GUI cũ của script
     for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
         if gui.Name == "WoodFarmStatus" or gui.Name == "AutoChopGui" then
             pcall(function() gui:Destroy() end)
