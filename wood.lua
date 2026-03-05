@@ -1,8 +1,9 @@
 --[[
-    WOOD.LUA v3.8 - TREE KILLAURA (AoE)
-    - KillAura: Chops all trees in 30-stud radius simultaneously
-    - Performance: Extreme Turbo (9 fires per cycle)
-    - Reliability: Dynamic Remotes & State Reset
+    WOOD.LUA v3.9 - GOD MODE (ULTIMATE KILLAURA)
+    - Persistent KillAura: 40-stud radius background task
+    - Aggressive Auto-Spawn: UI Clicker for "Spawn/Play"
+    - Simplified Navigation: Fast TP to nearest tree
+    - Extreme Stability: Non-blocking dynamic remotes
 ]]
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -15,8 +16,8 @@ local TeleportService   = game:GetService("TeleportService")
 local RunService        = game:GetService("RunService")
 local CoreGui           = game:GetService("CoreGui")
 
-local function debugLog(msg, color)
-    print("[WOOD v3.8]: " .. tostring(msg))
+local function debugLog(msg)
+    print("[WOOD v3.9]: " .. tostring(msg))
 end
 
 -- [DYNAMIC REMOTES]
@@ -38,7 +39,7 @@ local settings = {
     delay = 0.04,
     toolSlot = 4,
     scanRange = 5000,
-    killAuraRange = 30, -- Bán kính KillAura
+    killAuraRange = 40,
     isTeleporting = false,
     targetCF = nil,
     targetTree = nil,
@@ -46,7 +47,42 @@ local settings = {
     respawnArgs = {15382674, 12, 2, 17, 15382674, 15382674, false}
 }
 
--- [1] AUTO RECONNECT
+-- [1] AGGRESSIVE AUTO-SPAWN (UI Clicker)
+task.spawn(function()
+    while true do
+        pcall(function()
+            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
+                local playerGui = lp:FindFirstChild("PlayerGui")
+                if playerGui then
+                    for _, g in ipairs(playerGui:GetChildren()) do
+                        if g:IsA("ScreenGui") and g.Enabled then
+                            for _, b in ipairs(g:GetDescendants()) do
+                                if b:IsA("TextButton") or b:IsA("ImageButton") then
+                                    local t = (b:IsA("TextButton") and b.Text or ""):lower()
+                                    if t:find("spawn") or t:find("play") or t:find("respawn") then
+                                        debugLog("Auto Clicking: " .. b.Name .. " (" .. t .. ")")
+                                        -- Click simulation
+                                        local signals = {"MouseButton1Click", "MouseButton1Down", "Activated"}
+                                        for _, s in ipairs(signals) do
+                                            if b[s] then
+                                                for _, connection in ipairs(getconnections(b[s])) do
+                                                    connection:Fire()
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
+-- [2] AUTO RECONNECT
 task.spawn(function()
     while true do
         pcall(function()
@@ -62,24 +98,58 @@ task.spawn(function()
     end
 end)
 
--- [2] FAST PICKUP
+local function getHRP() return lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") end
+
+-- [3] PERSISTENT KILLAURA (Background Task)
 task.spawn(function()
     while true do
-        local pk = getPickup()
-        if settings.enabled and pk then
+        local chop = getChop()
+        local hrp = getHRP()
+        if settings.enabled and chop and hrp then
             pcall(function()
-                local dropped = workspace:FindFirstChild("droppedItems")
-                if dropped then
-                    for _, item in ipairs(dropped:GetChildren()) do
-                        if item:IsA("BasePart") then
-                            local d = (lp.Character and lp.Character:GetPivot().Position - item.Position).Magnitude
-                            if d < 100 then pk:FireServer(item) end
+                local choppable = workspace:FindFirstChild("worldResources") and workspace.worldResources:FindFirstChild("choppable")
+                if choppable then
+                    local charPos = hrp.Position
+                    for _, segment in ipairs(choppable:GetChildren()) do
+                        for _, tree in ipairs(segment:GetChildren()) do
+                            local health = tree:GetAttribute("health")
+                            if health == nil or health > 0 then
+                                local treePos = tree:GetPivot().Position
+                                if (treePos - charPos).Magnitude < settings.killAuraRange then
+                                    local cf = tree:GetPivot()
+                                    -- High pressure fire
+                                    chop:FireServer(settings.toolSlot, tree, cf)
+                                    chop:FireServer(settings.toolSlot, tree, cf)
+                                end
+                            end
                         end
                     end
                 end
             end)
         end
-        task.wait(0.2)
+        task.wait(0.1) -- 10 times per second
+    end
+end)
+
+-- [4] FAST PICKUP
+task.spawn(function()
+    while true do
+        local pk = getPickup()
+        local hrp = getHRP()
+        if settings.enabled and pk and hrp then
+            pcall(function()
+                local dropped = workspace:FindFirstChild("droppedItems")
+                if dropped then
+                    local charPos = hrp.Position
+                    for _, item in ipairs(dropped:GetChildren()) do
+                        if item:IsA("BasePart") and (charPos - item.Position).Magnitude < 100 then
+                            pk:FireServer(item)
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(0.3)
     end
 end)
 
@@ -89,28 +159,6 @@ local function liteUIWipe()
         local ui = lp.PlayerGui:FindFirstChild(name)
         if ui and ui:IsA("ScreenGui") then pcall(function() ui.Enabled = false end) end
     end
-end
-
-local function getHRP() return lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") end
-
--- LẤY TOÀN BỘ CÂY TRONG VÙNG (Dùng cho KillAura)
-local function getTreesInRange(center, radius)
-    local trees = {}
-    local choppable = workspace:FindFirstChild("worldResources") and workspace.worldResources:FindFirstChild("choppable")
-    if not choppable then return trees end
-    
-    for _, segment in ipairs(choppable:GetChildren()) do
-        for _, tree in ipairs(segment:GetChildren()) do
-            local health = tree:GetAttribute("health")
-            if health == nil or health > 0 then
-                local pos = tree:IsA("PVInstance") and tree:GetPivot().Position
-                if pos and (pos - center).Magnitude < radius then
-                    table.insert(trees, tree)
-                end
-            end
-        end
-    end
-    return trees
 end
 
 local function getNearestTree()
@@ -123,46 +171,18 @@ local function getNearestTree()
         for _, tree in ipairs(segment:GetChildren()) do
             local health = tree:GetAttribute("health")
             if health == nil or health > 0 then
-                local pos = tree:IsA("PVInstance") and tree:GetPivot().Position
-                if pos then
-                    local d = (hrp.Position - pos).Magnitude
-                    if d < minDist then minDist = d; nearest = tree end
-                end
+                local pos = tree:GetPivot().Position
+                local d = (hrp.Position - pos).Magnitude
+                if d < minDist then minDist = d; nearest = tree end
             end
         end
     end
     return nearest, minDist
 end
 
--- KILLAURA CHOPPING (Phá mọi cây xung quanh)
-local function startKillAura()
-    local chop = getChop()
-    local hrp = getHRP()
-    if not chop or not hrp then return end
-    
-    debugLog("KillAura Active")
-    local startTime = tick()
-    while settings.enabled and (tick() - startTime < 8) do
-        local targets = getTreesInRange(hrp.Position, settings.killAuraRange)
-        if #targets == 0 then break end
-        
-        pcall(function()
-            for _, tree in ipairs(targets) do
-                local cf = tree:GetPivot()
-                -- 3 nhịp mỗi cây
-                chop:FireServer(settings.toolSlot, tree, cf)
-                chop:FireServer(settings.toolSlot, tree, cf)
-                chop:FireServer(settings.toolSlot, tree, cf)
-            end
-        end)
-        task.wait(settings.delay)
-    end
-end
-
-local function smartTeleport(cf, tree)
+local function smartTeleport(cf)
     settings.isTeleporting = true
     settings.targetCF = cf
-    settings.targetTree = tree
     local rst = getReset()
     local rsp = getRespawn()
     if rst then pcall(function() rst:InvokeServer() end) end
@@ -170,6 +190,7 @@ local function smartTeleport(cf, tree)
     if rsp then pcall(function() rsp:InvokeServer(unpack(settings.respawnArgs)) end) end
 end
 
+-- [5] SIMPLIFIED NAVIGATION LOOP
 local function farmLoop()
     if not settings.enabled then return end
     
@@ -180,19 +201,17 @@ local function farmLoop()
         local hrp = getHRP()
         if hrp then
             if dist < 50 then
+                -- Direct Move
                 for _ = 1, 3 do
                     hrp.CFrame = targetCF
                     hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
                     task.wait()
                 end
-                pcall(function()
-                    lp.Character.Humanoid.PlatformStand = false
-                    lp.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Running)
-                end)
-                startKillAura()
+                -- Let KillAura handle the chopping
+                task.wait(0.5) 
                 task.spawn(farmLoop)
             else
-                smartTeleport(targetCF, tree)
+                smartTeleport(targetCF)
             end
         end
     else
@@ -205,7 +224,6 @@ lp.CharacterAdded:Connect(function(char)
     liteUIWipe()
     task.spawn(function()
         local hrp = char:WaitForChild("HumanoidRootPart", 5)
-        local hum = char:WaitForChild("Humanoid", 5)
         if not hrp then return end
         task.wait()
 
@@ -217,8 +235,6 @@ lp.CharacterAdded:Connect(function(char)
                 task.wait()
             end
             settings.isTeleporting = false
-            if hum then hum:ChangeState(Enum.HumanoidStateType.Running) end
-            startKillAura()
         else
             for i = 1, 10 do
                 if not hrp or not hrp.Parent then break end
@@ -230,6 +246,7 @@ lp.CharacterAdded:Connect(function(char)
     end)
 end)
 
+-- GUI SETUP
 local function setupGUI()
     pcall(function()
         if lp.PlayerGui:FindFirstChild("AutoChopGui") then lp.PlayerGui.AutoChopGui:Destroy() end
@@ -237,17 +254,17 @@ local function setupGUI()
         ScreenGui.Name = "AutoChopGui"
         
         local Main = Instance.new("Frame", ScreenGui)
-        Main.Size = UDim2.new(0, 200, 0, 130)
+        Main.Size = UDim2.new(0, 200, 0, 140)
         Main.Position = UDim2.new(0, 10, 0, 50)
-        Main.BackgroundColor3 = Color3.fromRGB(20,20,20)
+        Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         Main.Draggable = true; Main.Active = true
         Instance.new("UICorner", Main)
 
         local Title = Instance.new("TextLabel", Main)
         Title.Size = UDim2.new(1,0,0,35)
-        Title.Text = "WOOD v3.8 KILLAURA"
+        Title.Text = "WOOD v3.9 GOD MODE"
         Title.TextColor3 = Color3.new(1,1,1)
-        Title.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+        Title.BackgroundColor3 = Color3.fromRGB(180, 0, 180)
         Title.Font = Enum.Font.GothamBold
         Instance.new("UICorner", Title)
 
@@ -255,31 +272,31 @@ local function setupGUI()
         Btn.Size = UDim2.new(0.9,0,0,50)
         Btn.Position = UDim2.new(0.05,0,0,45)
         Btn.Text = "DỪNG FARM"
-        Btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        Btn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
         Btn.TextColor3 = Color3.new(1,1,1)
         Btn.Font = Enum.Font.GothamBold
         Instance.new("UICorner", Btn)
 
         local Status = Instance.new("TextLabel", Main)
-        Status.Size = UDim2.new(1, 0, 0, 30)
-        Status.Position = UDim2.new(0, 0, 1, -30)
+        Status.Size = UDim2.new(1, 0, 0, 35)
+        Status.Position = UDim2.new(0, 0, 1, -35)
         Status.BackgroundTransparency = 1
-        Status.Text = "AoE Radius: 30 studs"
-        Status.TextColor3 = Color3.new(1, 1, 1)
-        Status.TextSize = 10
+        Status.Text = "KillAura: 40 studs | AoE ON"
+        Status.TextColor3 = Color3.new(1, 0.4, 1)
+        Status.TextSize = 12
         Status.Parent = Main
 
         Btn.MouseButton1Click:Connect(function()
             settings.enabled = not settings.enabled
             Btn.Text = settings.enabled and "DỪNG FARM" or "BẮT ĐẦU FARM"
-            Btn.BackgroundColor3 = settings.enabled and Color3.fromRGB(150,0,0) or Color3.fromRGB(0,150,0)
+            Btn.BackgroundColor3 = settings.enabled and Color3.fromRGB(180,0,0) or Color3.fromRGB(0,180,0)
             if settings.enabled then task.spawn(farmLoop) end
         end)
     end)
 end
 
 setupGUI()
-debugLog("WOOD v3.8 KILLAURA Loaded.")
+debugLog("WOOD v3.9 GOD MODE Loaded.")
 local rst = getReset()
 local rsp = getRespawn()
 if rst then pcall(function() rst:InvokeServer() end) end
