@@ -1,8 +1,7 @@
 --[[
-    WOOD.LUA v3.4 - INSANE SPEED (EXTREME TURBO)
-    - Turbo Chop: Fire 3x per cycle
-    - Fast Pickup: Background loot task
-    - Ultra Fast Recovery: 0-delay after respawn
+    WOOD.LUA v3.5 - EMERGENCY FIX
+    - Non-Blocking Remotes (Zero-Hang)
+    - Version Force Display: v3.5
 ]]
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -16,21 +15,21 @@ local HttpService       = game:GetService("HttpService")
 local RunService        = game:GetService("RunService")
 local CoreGui           = game:GetService("CoreGui")
 
--- REMOTE INTERFACES
-local ri            = ReplicatedStorage:WaitForChild("remoteInterface")
-local intRemotes    = ri:WaitForChild("interactions")
-local charRemotes   = ri:WaitForChild("character")
-local toolRemotes   = ri:WaitForChild("Tools", 5)
+-- REMOTE INTERFACES (NON-BLOCKING)
+local ri = ReplicatedStorage:FindFirstChild("remoteInterface")
+local intRemotes = ri and ri:FindFirstChild("interactions")
+local charRemotes = ri and ri:FindFirstChild("character")
+local toolRemotes = ri and ri:FindFirstChild("Tools")
 
-local chopRemote    = intRemotes:WaitForChild("chop")
-local resetRemote   = charRemotes:WaitForChild("reset")
-local respawnRemote = charRemotes:WaitForChild("respawn")
-local pickupRemote  = intRemotes:WaitForChild("pickupItem", 2) or (ri:FindFirstChild("inventory") and ri.inventory:FindFirstChild("pickupItem"))
-local toolCheck     = toolRemotes and toolRemotes:WaitForChild("CheckToolSetup", 3)
+local chopRemote    = intRemotes and intRemotes:FindFirstChild("chop")
+local resetRemote   = charRemotes and charRemotes:FindFirstChild("reset")
+local respawnRemote = charRemotes and charRemotes:FindFirstChild("respawn")
+local pickupRemote  = (intRemotes and intRemotes:FindFirstChild("pickupItem")) or (ri and ri:FindFirstChild("inventory") and ri.inventory:FindFirstChild("pickupItem"))
+local toolCheck     = toolRemotes and toolRemotes:FindFirstChild("CheckToolSetup")
 
 local settings = {
     enabled       = true,
-    delay         = 0.04, -- Cực nhanh
+    delay         = 0.04, 
     toolSlot      = 4,
     scanRange     = 5000,
     isTeleporting = false,
@@ -122,7 +121,7 @@ end
 
 -- VÒNG LẶP CHOP CHÍNH (TURBO)
 local function startChopping(tree)
-    if not tree or not tree.Parent then return end
+    if not tree or not tree.Parent or not chopRemote then return end
     local tool = (lp.Character and lp.Character:FindFirstChild(tostring(settings.toolSlot)))
                or (lp.Backpack and lp.Backpack:FindFirstChild(tostring(settings.toolSlot)))
     if tool and toolCheck then pcall(function() toolCheck:InvokeServer(tool) end) end
@@ -147,9 +146,9 @@ local function smartTeleport(cf, tree)
     settings.isTeleporting = true
     settings.targetCF = cf
     settings.targetTree = tree
-    pcall(function() resetRemote:InvokeServer() end)
+    if resetRemote then pcall(function() resetRemote:InvokeServer() end) end
     task.wait(0.3)
-    pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end)
+    if respawnRemote then pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end) end
 end
 
 local function farmLoop()
@@ -224,7 +223,7 @@ local function setupGUI()
 
         local Title = Instance.new("TextLabel", Main)
         Title.Size = UDim2.new(1,0,0,30)
-        Title.Text = "WOOD v3.4 TURBO"
+        Title.Text = "WOOD v3.5 FIXED"
         Title.TextColor3 = Color3.new(1,1,1)
         Title.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
         Instance.new("UICorner", Title)
@@ -247,7 +246,7 @@ local function setupGUI()
 end
 
 setupGUI()
-print("Wood v3.4 Insane Speed Loaded.")
-pcall(function() resetRemote:InvokeServer() end)
+print("Wood v3.5 EMERGENCY FIXED Loaded.")
+if resetRemote then pcall(function() resetRemote:InvokeServer() end) end
 task.wait(0.2)
-pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end)
+if respawnRemote then pcall(function() respawnRemote:InvokeServer(unpack(settings.respawnArgs)) end) end
