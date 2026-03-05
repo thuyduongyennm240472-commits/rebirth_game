@@ -339,11 +339,14 @@ local function ensureSpawned()
     
     log("Đợi Stats đồng bộ...")
     local waitStart = tick()
-    while (tick() - waitStart < 5) do -- Giảm từ 10s xuống 5s
-        if lp.PlayerGui:FindFirstChild("Skills") or lp.PlayerGui:FindFirstChild("MainGui") then break end
-        task.wait(0.2)
+    while (tick() - waitStart < 15) do -- Tăng từ 5s lên 15s để chắc chắn
+        if lp.PlayerGui:FindFirstChild("Skills") or lp.PlayerGui:FindFirstChild("MainGui") then 
+            task.wait(2) -- Đợi thêm 2s sau khi thấy GUI để text kịp cập nhật
+            break 
+        end
+        task.wait(0.5)
     end
-    task.wait(0.5) -- Giảm từ 2s xuống 0.5s
+    task.wait(1) -- Nghỉ thêm 1s cuối cùng cho an toàn
 end
 
 ensureSpawned()
