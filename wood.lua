@@ -250,6 +250,24 @@ local function startChopping(tree)
 end
 
 -- ==================== TELEPORT ====================
+local function autoClickSpawn()
+    if _G.forceSpawn then return _G.forceSpawn() end
+    pcall(function()
+        for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, btn in ipairs(gui:GetDescendants()) do
+                    if btn:IsA("TextButton") and btn.Visible then
+                        local t = btn.Text:lower()
+                        if t == "spawn" or t == "respawn" or t == "play" then
+                            pcall(function() btn.MouseButton1Click:Fire() end)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
 local function respawnTP(cf, tree)
     state.isTeleporting = true
     state.targetCF      = cf
@@ -266,11 +284,7 @@ local function respawnTP(cf, tree)
     task.delay(3, function()
         if state.isTeleporting and not getHRP() then
             log("[WATCHDOG] Cảnh báo: Respawn chậm, đang dùng forceSpawn...")
-            if _G.forceSpawn then 
-                _G.forceSpawn() 
-            else
-                autoClickSpawn()
-            end
+            autoClickSpawn()
         end
     end)
 end
